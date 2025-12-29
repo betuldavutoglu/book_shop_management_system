@@ -1,0 +1,316 @@
+package ui;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import model.Book;
+import service.BookService;
+import java.awt.*;
+import java.util.List;
+
+@SuppressWarnings("serial")
+public class BookPanel extends JPanel {
+    private JTable bookTable;
+    private DefaultTableModel tableModel;
+    private JTextField searchField;
+    private BookService bookService;
+    
+    public BookPanel() {
+        this.bookService = new BookService();
+        initializeUI();
+        loadBooks();
+    }
+    
+    private void initializeUI() {
+        setLayout(new BorderLayout());
+        
+      
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        JLabel titleLabel = new JLabel("Book Management");
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 18));
+        topPanel.add(titleLabel, BorderLayout.WEST);
+        
+       
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        searchField = new JTextField(20);
+        JButton searchButton = new JButton("Search");
+        JButton clearButton = new JButton("Clear");
+        
+        searchButton.addActionListener(e -> searchBooks());
+        clearButton.addActionListener(e -> {
+            searchField.setText("");
+            loadBooks();
+        });
+        
+        searchPanel.add(new JLabel("Search:"));
+        searchPanel.add(searchField);
+        searchPanel.add(searchButton);
+        searchPanel.add(clearButton);
+        topPanel.add(searchPanel, BorderLayout.EAST);
+        
+        add(topPanel, BorderLayout.NORTH);
+        
+        
+        String[] columns = {"ID", "Title", "Author", "ISBN", "Price", "Quantity", "Category", "Year"};
+        tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+            
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                
+                return columnIndex == 0 ? Integer.class : Object.class;
+            }
+        };
+        
+        bookTable = new JTable(tableModel);
+        bookTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        bookTable.setAutoCreateRowSorter(true); 
+        JScrollPane scrollPane = new JScrollPane(bookTable);
+        add(scrollPane, BorderLayout.CENTER);
+        
+       
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        
+        JButton addButton = new JButton("Add Book");
+        JButton editButton = new JButton("Edit Book");
+        JButton deleteButton = new JButton("Delete Book");
+        JButton refreshButton = new JButton("Refresh");
+        
+        addButton.addActionListener(e -> showAddEditDialog(null));
+        editButton.addActionListener(e -> editSelectedBook());
+        deleteButton.addActionListener(e -> deleteSelectedBook());
+        refreshButton.addActionListener(e -> loadBooks());
+        
+        buttonPanel.add(addButton);
+        buttonPanel.add(editButton);
+        buttonPanel.add(deleteButton);
+        buttonPanel.add(refreshButton);
+        
+        add(buttonPanel, BorderLayout.SOUTH);
+    }
+    
+    private void loadBooks() {
+        tableModel.setRowCount(0);
+        List<Book> books = bookService.getAllBooks();
+        
+        if (books != null) {
+            for (Book book : books) {
+                Object[] row = {
+                    book.getBookId(),
+                    book.getTitle(),
+                    book.getAuthor(),
+                    book.getIsbn(),
+                    String.format("$%.2f", book.getPrice()),
+                    book.getQuantity(),
+                    book.getCategory() != null ? book.getCategory() : "",
+                    book.getPublishYear() != 0 ? book.getPublishYear() : "" 
+                };
+                tableModel.addRow(row);
+            }
+        }
+    }
+    
+    private void searchBooks() {
+        String keyword = searchField.getText().trim();
+        if (!keyword.isEmpty()) {
+            tableModel.setRowCount(0);
+            List<Book> books = bookService.searchBooks(keyword);
+            
+            if (books != null) {
+                for (Book book : books) {
+                    Object[] row = {
+                        book.getBookId(),
+                        book.getTitle(),
+                        book.getAuthor(),
+                        book.getIsbn(),
+                        String.format("$%.2f", book.getPrice()),
+                        book.getQuantity(),
+                        book.getCategory() != null ? book.getCategory() : "",
+                        book.getPublishYear() != 0 ? book.getPublishYear() : ""
+                    };
+                    tableModel.addRow(row);
+                }
+            }
+        }
+    }
+    
+    private void showAddEditDialog(Book book) {
+        
+        Window parentWindow = SwingUtilities.getWindowAncestor(this);
+        JDialog dialog = new JDialog(parentWindow, 
+            book == null ? "Add New Book" : "Edit Book", Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setSize(400, 450);
+        dialog.setLocationRelativeTo(this);
+        
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+        
+        JTextField titleField = new JTextField(20);
+        JTextField authorField = new JTextField(20);
+        JTextField isbnField = new JTextField(20);
+        JTextField priceField = new JTextField(20);
+        JTextField quantityField = new JTextField(20);
+        JTextField categoryField = new JTextField(20);
+        JTextField yearField = new JTextField(20);
+        
+        if (book != null) {
+            titleField.setText(book.getTitle());
+            authorField.setText(book.getAuthor());
+            isbnField.setText(book.getIsbn());
+            priceField.setText(String.valueOf(book.getPrice()));
+            quantityField.setText(String.valueOf(book.getQuantity()));
+            categoryField.setText(book.getCategory() != null ? book.getCategory() : "");
+            yearField.setText(book.getPublishYear() != 0 ? String.valueOf(book.getPublishYear()) : "");
+        }
+        
+        
+        gbc.gridx = 0; gbc.gridy = 0;
+        panel.add(new JLabel("Title:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 0;
+        panel.add(titleField, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 1;
+        panel.add(new JLabel("Author:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 1;
+        panel.add(authorField, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 2;
+        panel.add(new JLabel("ISBN:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 2;
+        panel.add(isbnField, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 3;
+        panel.add(new JLabel("Price:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 3;
+        panel.add(priceField, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 4;
+        panel.add(new JLabel("Quantity:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 4;
+        panel.add(quantityField, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 5;
+        panel.add(new JLabel("Category:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 5;
+        panel.add(categoryField, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 6;
+        panel.add(new JLabel("Publish Year:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 6;
+        panel.add(yearField, gbc);
+        
+        JButton saveButton = new JButton("Save");
+        JButton cancelButton = new JButton("Cancel");
+        
+        saveButton.addActionListener(e -> {
+            try {
+               
+                if (titleField.getText().trim().isEmpty() ||
+                    authorField.getText().trim().isEmpty() ||
+                    isbnField.getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, 
+                        "Title, Author and ISBN are required!", 
+                        "Validation Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
+                Book newBook = new Book();
+                if (book != null) {
+                    newBook.setBookId(book.getBookId());
+                }
+                newBook.setTitle(titleField.getText().trim());
+                newBook.setAuthor(authorField.getText().trim());
+                newBook.setIsbn(isbnField.getText().trim());
+                newBook.setPrice(Double.parseDouble(priceField.getText().trim()));
+                newBook.setQuantity(Integer.parseInt(quantityField.getText().trim()));
+                newBook.setCategory(categoryField.getText().trim());
+                
+                String yearText = yearField.getText().trim();
+                if (!yearText.isEmpty()) {
+                    newBook.setPublishYear(Integer.parseInt(yearText));
+                }
+                
+                boolean success;
+                if (book == null) {
+                    success = bookService.addBook(newBook);
+                } else {
+                    success = bookService.updateBook(newBook);
+                }
+                
+                if (success) {
+                    JOptionPane.showMessageDialog(dialog, "Book saved successfully!");
+                    dialog.dispose();
+                    loadBooks();
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "Error saving book!", 
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, 
+                    "Please enter valid numbers for Price, Quantity and Year!", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(saveButton);
+        buttonPanel.add(cancelButton);
+        
+        dialog.add(panel, BorderLayout.CENTER);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.pack(); 
+        dialog.setVisible(true);
+    }
+    
+    private void editSelectedBook() {
+        int selectedRow = bookTable.getSelectedRow();
+        if (selectedRow >= 0) {
+           
+            int modelRow = bookTable.convertRowIndexToModel(selectedRow);
+            int bookId = (int) tableModel.getValueAt(modelRow, 0);
+            Book book = bookService.getBook(bookId);
+            if (book != null) {
+                showAddEditDialog(book);
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, "Please select a book to edit!",
+                "Warning", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+    
+    private void deleteSelectedBook() {
+        int selectedRow = bookTable.getSelectedRow();
+        if (selectedRow >= 0) {
+            
+            int modelRow = bookTable.convertRowIndexToModel(selectedRow);
+            int bookId = (int) tableModel.getValueAt(modelRow, 0);
+            String bookTitle = (String) tableModel.getValueAt(modelRow, 1);
+            
+            int confirm = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to delete '" + bookTitle + "'?",
+                "Confirm Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            
+            if (confirm == JOptionPane.YES_OPTION) {
+                if (bookService.deleteBook(bookId)) {
+                    JOptionPane.showMessageDialog(this, "Book deleted successfully!");
+                    loadBooks();
+                } else {
+                    JOptionPane.showMessageDialog(this, "Error deleting book!\n" +
+                        "Book might be referenced in orders.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, "Please select a book to delete!",
+                "Warning", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+}
