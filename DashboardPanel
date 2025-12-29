@@ -1,0 +1,28 @@
+package ui;
+
+import javax.swing.*;
+import java.awt.*;
+
+@SuppressWarnings("serial")
+public class DashboardPanel extends JPanel {
+    
+    public DashboardPanel() {
+        System.out.println("DashboardPanel constructor started");
+        initializeSimpleUI();
+        System.out.println("DashboardPanel constructor completed");
+    }
+    
+    private void initializeSimpleUI() {
+        setLayout(new BorderLayout());
+        
+        
+        JLabel label = new JLabel("Dashboard (Testing Mode)", SwingConstants.CENTER);
+        label.setFont(new Font("Arial", Font.BOLD, 20));
+        label.setBorder(BorderFactory.createEmptyBorder(50, 50, 50, 50));
+        
+        add(label, BorderLayout.CENTER);
+        
+       
+        System.out.println("DashboardPanel UI initialized");
+    }
+}
