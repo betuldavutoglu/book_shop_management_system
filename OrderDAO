@@ -1,0 +1,504 @@
+package dao;
+
+import model.Order;
+import model.OrderItem;
+import database.veriTabani;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class OrderDAO {
+    
+    public boolean create(Order order) {
+        System.out.println("=== OrderDAO.create() çağrıldı ===");
+        
+        Connection conn = null;
+        try {
+            conn = veriTabani.getConnection();
+            conn.setAutoCommit(false); // Transaction başlat
+            
+            // 1. Siparişi kaydet
+            String orderSql = "INSERT INTO orders (customer_id, total_amount, status, order_date) VALUES (?, ?, ?, ?)";
+            
+            try (PreparedStatement orderStmt = conn.prepareStatement(orderSql, Statement.RETURN_GENERATED_KEYS)) {
+                orderStmt.setInt(1, order.getCustomerId());
+                orderStmt.setDouble(2, order.getTotalAmount());
+                orderStmt.setString(3, order.getStatus());
+                orderStmt.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
+                
+                System.out.println("SQL parametreleri:");
+                System.out.println("  customer_id: " + order.getCustomerId());
+                System.out.println("  total_amount: " + order.getTotalAmount());
+                System.out.println("  status: " + order.getStatus());
+                
+                int orderAffected = orderStmt.executeUpdate();
+                System.out.println("Sipariş kayıt sonucu: " + orderAffected + " satır etkilendi");
+                
+                if (orderAffected == 0) {
+                    conn.rollback();
+                    System.out.println("✗ Sipariş kaydedilemedi!");
+                    return false;
+                }
+                
+                // Oluşturulan sipariş ID'sini al
+                try (ResultSet generatedKeys = orderStmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        int orderId = generatedKeys.getInt(1);
+                        order.setOrderId(orderId);
+                        System.out.println("✓ Yeni Sipariş ID: " + orderId);
+                        
+                        // 2. Sipariş öğelerini kaydet ve stokları güncelle
+                        if (saveOrderItemsAndUpdateStock(conn, orderId, order.getItems())) {
+                            conn.commit();
+                            System.out.println("✓ Transaction başarıyla tamamlandı");
+                            return true;
+                        } else {
+                            conn.rollback();
+                            System.out.println("✗ Sipariş öğeleri kaydedilemedi!");
+                            return false;
+                        }
+                    } else {
+                        conn.rollback();
+                        System.out.println("✗ Sipariş ID alınamadı!");
+                        return false;
+                    }
+                }
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("✗ OrderDAO.create() SQL hatası: " + e.getMessage());
+            System.err.println("SQL State: " + e.getSQLState());
+            System.err.println("Error Code: " + e.getErrorCode());
+            e.printStackTrace();
+            
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                    System.out.println("⚠️ Transaction rollback edildi");
+                } catch (SQLException rollbackEx) {
+                    System.err.println("✗ Rollback hatası: " + rollbackEx.getMessage());
+                }
+            }
+            return false;
+            
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                } catch (SQLException closeEx) {
+                    System.err.println("✗ Bağlantı kapatma hatası: " + closeEx.getMessage());
+                }
+            }
+        }
+    }
+    
+    private boolean saveOrderItemsAndUpdateStock(Connection conn, int orderId, List<OrderItem> items) throws SQLException {
+        if (items == null || items.isEmpty()) {
+            System.out.println("⚠️ Kaydedilecek sipariş öğesi yok!");
+            return true; // Boş öğe listesi hatası değil
+        }
+        
+        System.out.println("Sipariş öğeleri kaydediliyor (" + items.size() + " adet)...");
+        
+        // Önce tüm stokları kontrol et
+        for (OrderItem item : items) {
+            String checkStockSql = "SELECT quantity, title FROM books WHERE book_id = ?";
+            try (PreparedStatement checkStmt = conn.prepareStatement(checkStockSql)) {
+                checkStmt.setInt(1, item.getBookId());
+                ResultSet rs = checkStmt.executeQuery();
+                
+                if (!rs.next()) {
+                    System.out.println("✗ Kitap ID " + item.getBookId() + " bulunamadı!");
+                    return false;
+                }
+                
+                int currentStock = rs.getInt("quantity");
+                String bookTitle = rs.getString("title");
+                
+                if (currentStock < item.getQuantity()) {
+                    System.out.println("✗ Yetersiz stok! Kitap: " + bookTitle + 
+                                     " (ID: " + item.getBookId() + ")" +
+                                     ", İstenen: " + item.getQuantity() + 
+                                     ", Mevcut: " + currentStock);
+                    return false;
+                }
+                
+                System.out.println("✓ Kitap: " + bookTitle + " (ID: " + item.getBookId() + ") stok kontrolü başarılı");
+            }
+        }
+        
+        // Stokları güncelle
+        String updateStockSql = "UPDATE books SET quantity = quantity - ? WHERE book_id = ?";
+        try (PreparedStatement updateStmt = conn.prepareStatement(updateStockSql)) {
+            for (OrderItem item : items) {
+                updateStmt.setInt(1, item.getQuantity());
+                updateStmt.setInt(2, item.getBookId());
+                updateStmt.addBatch();
+            }
+            
+            int[] stockResults = updateStmt.executeBatch();
+            System.out.println("✓ Stoklar güncellendi, etkilenen satırlar: " + stockResults.length);
+        }
+        
+        // Sipariş öğelerini kaydet
+        String insertItemSql = "INSERT INTO order_items (order_id, book_id, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement insertStmt = conn.prepareStatement(insertItemSql)) {
+            for (OrderItem item : items) {
+                double itemTotal = item.getQuantity() * item.getUnitPrice();
+                
+                insertStmt.setInt(1, orderId);
+                insertStmt.setInt(2, item.getBookId());
+                insertStmt.setInt(3, item.getQuantity());
+                insertStmt.setDouble(4, item.getUnitPrice());
+                insertStmt.setDouble(5, itemTotal);
+                insertStmt.addBatch();
+                
+                System.out.println("  Öğe - Kitap ID: " + item.getBookId() + 
+                                 ", Miktar: " + item.getQuantity() + 
+                                 ", Fiyat: " + item.getUnitPrice() +
+                                 ", Toplam: " + itemTotal);
+            }
+            
+            int[] itemResults = insertStmt.executeBatch();
+            System.out.println("✓ Sipariş öğeleri kaydedildi, etkilenen satırlar: " + itemResults.length);
+        }
+        
+        return true;
+    }
+    
+    public List<Order> readAll() {
+        System.out.println("=== OrderDAO.readAll() çağrıldı ===");
+        
+        List<Order> orders = new ArrayList<>();
+        String sql = "SELECT o.*, CONCAT(c.first_name, ' ', c.last_name) as customer_name " +
+                    "FROM orders o " +
+                    "LEFT JOIN customers c ON o.customer_id = c.customer_id " +
+                    "ORDER BY o.order_id DESC"; // DESC: en yeni siparişler önce
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql);
+             ResultSet rs = pstmt.executeQuery()) {
+            
+            System.out.println("SQL çalıştırıldı, sonuçlar getiriliyor...");
+            
+            int count = 0;
+            while (rs.next()) {
+                count++;
+                Order order = new Order();
+                order.setOrderId(rs.getInt("order_id"));
+                order.setCustomerId(rs.getInt("customer_id"));
+                
+                String customerName = rs.getString("customer_name");
+                if (customerName != null && !customerName.trim().isEmpty()) {
+                    order.setCustomerName(customerName);
+                } else {
+                    order.setCustomerName("Müşteri " + rs.getInt("customer_id"));
+                }
+                
+                Timestamp orderDate = rs.getTimestamp("order_date");
+                if (orderDate != null) {
+                    order.setOrderDate(new java.util.Date(orderDate.getTime()));
+                }
+                
+                order.setTotalAmount(rs.getDouble("total_amount"));
+                order.setStatus(rs.getString("status"));
+                
+                // Sipariş öğelerini getir
+                List<OrderItem> items = getOrderItems(conn, order.getOrderId());
+                order.setItems(items);
+                
+                orders.add(order);
+                
+                System.out.println("  " + count + ". Sipariş ID: " + order.getOrderId() + 
+                                 ", Müşteri: " + order.getCustomerName() +
+                                 ", Tutar: " + order.getTotalAmount());
+            }
+            
+            System.out.println("✓ Toplam " + orders.size() + " sipariş bulundu");
+            
+        } catch (SQLException e) {
+            System.err.println("✗ OrderDAO.readAll() hatası: " + e.getMessage());
+            System.err.println("SQL State: " + e.getSQLState());
+            e.printStackTrace();
+        }
+        
+        return orders;
+    }
+    
+    public Order read(int id) {
+        System.out.println("=== OrderDAO.read() çağrıldı, ID: " + id + " ===");
+        
+        String sql = "SELECT o.*, CONCAT(c.first_name, ' ', c.last_name) as customer_name " +
+                    "FROM orders o " +
+                    "LEFT JOIN customers c ON o.customer_id = c.customer_id " +
+                    "WHERE o.order_id = ?";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, id);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    Order order = new Order();
+                    order.setOrderId(rs.getInt("order_id"));
+                    order.setCustomerId(rs.getInt("customer_id"));
+                    
+                    String customerName = rs.getString("customer_name");
+                    if (customerName != null && !customerName.trim().isEmpty()) {
+                        order.setCustomerName(customerName);
+                    } else {
+                        order.setCustomerName("Müşteri " + rs.getInt("customer_id"));
+                    }
+                    
+                    Timestamp orderDate = rs.getTimestamp("order_date");
+                    if (orderDate != null) {
+                        order.setOrderDate(new java.util.Date(orderDate.getTime()));
+                    }
+                    
+                    order.setTotalAmount(rs.getDouble("total_amount"));
+                    order.setStatus(rs.getString("status"));
+                    
+                    // Sipariş öğelerini getir
+                    List<OrderItem> items = getOrderItems(conn, id);
+                    order.setItems(items);
+                    
+                    System.out.println("✓ Sipariş bulundu: ID=" + id + 
+                                     ", Müşteri: " + order.getCustomerName() +
+                                     ", Tutar: " + order.getTotalAmount());
+                    return order;
+                } else {
+                    System.out.println("⚠️ Sipariş bulunamadı: ID=" + id);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("✗ OrderDAO.read() hatası: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return null;
+    }
+    
+    private List<OrderItem> getOrderItems(Connection conn, int orderId) throws SQLException {
+        List<OrderItem> items = new ArrayList<>();
+        String sql = "SELECT oi.*, b.title as book_title " +
+                    "FROM order_items oi " +
+                    "LEFT JOIN books b ON oi.book_id = b.book_id " +
+                    "WHERE oi.order_id = ?";
+        
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, orderId);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    OrderItem item = new OrderItem();
+                    
+                    // Veritabanındaki sütun adlarına dikkat edin!
+                    // 'order_item_id' veya 'item_id' olabilir
+                    try {
+                        item.setItemId(rs.getInt("order_item_id"));
+                    } catch (SQLException e) {
+                        try {
+                            item.setItemId(rs.getInt("item_id"));
+                        } catch (SQLException e2) {
+                            item.setItemId(0); // ID yoksa 0
+                        }
+                    }
+                    
+                    item.setOrderId(rs.getInt("order_id"));
+                    item.setBookId(rs.getInt("book_id"));
+                    item.setBookTitle(rs.getString("book_title"));
+                    item.setQuantity(rs.getInt("quantity"));
+                    item.setUnitPrice(rs.getDouble("unit_price"));
+                    
+                    items.add(item);
+                }
+            }
+        }
+        
+        return items;
+    }
+    
+    public boolean delete(int id) {
+        System.out.println("=== OrderDAO.delete() çağrıldı, ID: " + id + " ===");
+        
+        Connection conn = null;
+        try {
+            conn = veriTabani.getConnection();
+            conn.setAutoCommit(false);
+            
+            // 1. Önce sipariş öğelerini ve stokları geri yükle
+            List<OrderItem> items = getOrderItems(conn, id);
+            if (items != null && !items.isEmpty()) {
+                System.out.println("Stoklar geri yükleniyor...");
+                String updateStockSql = "UPDATE books SET quantity = quantity + ? WHERE book_id = ?";
+                try (PreparedStatement updateStmt = conn.prepareStatement(updateStockSql)) {
+                    for (OrderItem item : items) {
+                        updateStmt.setInt(1, item.getQuantity());
+                        updateStmt.setInt(2, item.getBookId());
+                        updateStmt.addBatch();
+                        System.out.println("  Kitap ID " + item.getBookId() + " için stok geri yüklendi: +" + item.getQuantity());
+                    }
+                    updateStmt.executeBatch();
+                }
+            }
+            
+            // 2. Sipariş öğelerini sil
+            System.out.println("Sipariş öğeleri siliniyor...");
+            try (PreparedStatement deleteItemsStmt = conn.prepareStatement("DELETE FROM order_items WHERE order_id = ?")) {
+                deleteItemsStmt.setInt(1, id);
+                int itemsDeleted = deleteItemsStmt.executeUpdate();
+                System.out.println("  " + itemsDeleted + " sipariş öğesi silindi");
+            }
+            
+            // 3. Siparişi sil
+            System.out.println("Sipariş siliniyor...");
+            try (PreparedStatement deleteOrderStmt = conn.prepareStatement("DELETE FROM orders WHERE order_id = ?")) {
+                deleteOrderStmt.setInt(1, id);
+                int ordersDeleted = deleteOrderStmt.executeUpdate();
+                
+                if (ordersDeleted > 0) {
+                    conn.commit();
+                    System.out.println("✓ Sipariş başarıyla silindi");
+                    return true;
+                } else {
+                    conn.rollback();
+                    System.out.println("⚠️ Silinecek sipariş bulunamadı");
+                    return false;
+                }
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("✗ OrderDAO.delete() hatası: " + e.getMessage());
+            e.printStackTrace();
+            
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    System.err.println("✗ Rollback hatası: " + rollbackEx.getMessage());
+                }
+            }
+            return false;
+            
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                } catch (SQLException closeEx) {
+                    System.err.println("✗ Bağlantı kapatma hatası: " + closeEx.getMessage());
+                }
+            }
+        }
+    }
+    
+    public boolean updateOrderStatus(int orderId, String status) {
+        System.out.println("=== OrderDAO.updateOrderStatus() çağrıldı ===");
+        System.out.println("Sipariş ID: " + orderId + ", Yeni durum: " + status);
+        
+        String sql = "UPDATE orders SET status = ? WHERE order_id = ?";
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, status);
+            pstmt.setInt(2, orderId);
+            
+            int rows = pstmt.executeUpdate();
+            System.out.println("  " + rows + " satır güncellendi");
+            
+            return rows > 0;
+            
+        } catch (SQLException e) {
+            System.err.println("✗ Durum güncelleme hatası: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+    
+    public boolean update(Order order) {
+        System.out.println("=== OrderDAO.update() çağrıldı ===");
+        System.out.println("Sipariş ID: " + order.getOrderId());
+        
+        String sql = "UPDATE orders SET total_amount = ?, status = ? WHERE order_id = ?";
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setDouble(1, order.getTotalAmount());
+            pstmt.setString(2, order.getStatus());
+            pstmt.setInt(3, order.getOrderId());
+            
+            int rows = pstmt.executeUpdate();
+            System.out.println("  " + rows + " satır güncellendi");
+            
+            return rows > 0;
+            
+        } catch (SQLException e) {
+            System.err.println("✗ Sipariş güncelleme hatası: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+    
+    public List<Order> getOrdersByCustomer(int customerId) {
+        System.out.println("=== OrderDAO.getOrdersByCustomer() çağrıldı ===");
+        System.out.println("Müşteri ID: " + customerId);
+        
+        List<Order> orders = new ArrayList<>();
+        String sql = "SELECT o.*, CONCAT(c.first_name, ' ', c.last_name) as customer_name " +
+                    "FROM orders o " +
+                    "LEFT JOIN customers c ON o.customer_id = c.customer_id " +
+                    "WHERE o.customer_id = ? " +
+                    "ORDER BY o.order_date DESC";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, customerId);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Order order = new Order();
+                    order.setOrderId(rs.getInt("order_id"));
+                    order.setCustomerId(rs.getInt("customer_id"));
+                    order.setCustomerName(rs.getString("customer_name"));
+                    
+                    Timestamp ts = rs.getTimestamp("order_date");
+                    if (ts != null) {
+                        order.setOrderDate(new java.util.Date(ts.getTime()));
+                    }
+                    
+                    order.setTotalAmount(rs.getDouble("total_amount"));
+                    order.setStatus(rs.getString("status"));
+                    
+                    // Sipariş öğelerini getir
+                    List<OrderItem> items = getOrderItems(conn, order.getOrderId());
+                    order.setItems(items);
+                    
+                    orders.add(order);
+                }
+            }
+            System.out.println("✓ " + orders.size() + " sipariş bulundu");
+            
+        } catch (SQLException e) {
+            System.err.println("✗ Müşteri siparişleri hatası: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return orders;
+    }
+    
+    public int getOrderCount() {
+        String sql = "SELECT COUNT(*) as count FROM orders";
+        try (Connection conn = veriTabani.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            if (rs.next()) {
+                return rs.getInt("count");
+            }
+        } catch (SQLException e) {
+            System.err.println("Sipariş sayısı hatası: " + e.getMessage());
+        }
+        return 0;
+    }
+}
