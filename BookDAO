@@ -1,0 +1,397 @@
+package dao;
+
+import model.Book;
+import model.Customer;
+import database.veriTabani;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class BookDAO implements DAO<Book> {
+    
+    @Override
+    public boolean create(Book book) {
+        String query = "INSERT INTO books (title, author, isbn, price, quantity, category, publish_year) " +
+                      "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+            
+            pstmt.setString(1, book.getTitle());
+            pstmt.setString(2, book.getAuthor());
+            pstmt.setString(3, book.getIsbn());
+            pstmt.setDouble(4, book.getPrice());
+            pstmt.setInt(5, book.getQuantity());
+            pstmt.setString(6, book.getCategory());
+            pstmt.setInt(7, book.getPublishYear());
+            
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        book.setBookId(rs.getInt(1));
+                    }
+                }
+                return true;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error creating book: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return false;
+    }
+    
+    @Override
+    public Book read(int id) {
+        String query = "SELECT * FROM books WHERE book_id = ?";
+        Book book = null;
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setInt(1, id);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    book = new Book();
+                    book.setBookId(rs.getInt("book_id"));
+                    book.setTitle(rs.getString("title"));
+                    book.setAuthor(rs.getString("author"));
+                    book.setIsbn(rs.getString("isbn"));
+                    book.setPrice(rs.getDouble("price"));
+                    book.setQuantity(rs.getInt("quantity"));
+                    book.setCategory(rs.getString("category"));
+                    book.setPublishYear(rs.getInt("publish_year"));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error reading book: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return book;
+    }
+    
+    @Override
+    public List<Book> readAll() {
+        List<Book> books = new ArrayList<>();
+        String query = "SELECT * FROM books ORDER BY title";
+        
+        try (Connection conn = veriTabani.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            
+            while (rs.next()) {
+                Book book = new Book();
+                book.setBookId(rs.getInt("book_id"));
+                book.setTitle(rs.getString("title"));
+                book.setAuthor(rs.getString("author"));
+                book.setIsbn(rs.getString("isbn"));
+                book.setPrice(rs.getDouble("price"));
+                book.setQuantity(rs.getInt("quantity"));
+                book.setCategory(rs.getString("category"));
+                book.setPublishYear(rs.getInt("publish_year"));
+                books.add(book);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error reading all books: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return books;
+    }
+    
+    @Override
+    public boolean update(Book book) {
+        String query = "UPDATE books SET title = ?, author = ?, isbn = ?, price = ?, " +
+                      "quantity = ?, category = ?, publish_year = ? WHERE book_id = ?";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setString(1, book.getTitle());
+            pstmt.setString(2, book.getAuthor());
+            pstmt.setString(3, book.getIsbn());
+            pstmt.setDouble(4, book.getPrice());
+            pstmt.setInt(5, book.getQuantity());
+            pstmt.setString(6, book.getCategory());
+            pstmt.setInt(7, book.getPublishYear());
+            pstmt.setInt(8, book.getBookId());
+            
+            return pstmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating book: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return false;
+    }
+    
+    @Override
+    public boolean delete(int id) {
+        String query = "DELETE FROM books WHERE book_id = ?";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setInt(1, id);
+            return pstmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error deleting book: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return false;
+    }
+    
+    // Ek metodlar
+    
+    public List<Book> searchByTitle(String keyword) {
+        List<Book> books = new ArrayList<>();
+        String query = "SELECT * FROM books WHERE title LIKE ? ORDER BY title";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setString(1, "%" + keyword + "%");
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Book book = new Book();
+                    book.setBookId(rs.getInt("book_id"));
+                    book.setTitle(rs.getString("title"));
+                    book.setAuthor(rs.getString("author"));
+                    book.setIsbn(rs.getString("isbn"));
+                    book.setPrice(rs.getDouble("price"));
+                    book.setQuantity(rs.getInt("quantity"));
+                    book.setCategory(rs.getString("category"));
+                    book.setPublishYear(rs.getInt("publish_year"));
+                    books.add(book);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error searching books: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return books;
+    }
+    
+    public List<Book> searchByAuthor(String keyword) {
+        List<Book> books = new ArrayList<>();
+        String query = "SELECT * FROM books WHERE author LIKE ? ORDER BY author, title";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setString(1, "%" + keyword + "%");
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Book book = new Book();
+                    book.setBookId(rs.getInt("book_id"));
+                    book.setTitle(rs.getString("title"));
+                    book.setAuthor(rs.getString("author"));
+                    book.setIsbn(rs.getString("isbn"));
+                    book.setPrice(rs.getDouble("price"));
+                    book.setQuantity(rs.getInt("quantity"));
+                    book.setCategory(rs.getString("category"));
+                    book.setPublishYear(rs.getInt("publish_year"));
+                    books.add(book);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error searching books by author: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return books;
+    }
+    
+    public List<Book> searchByCategory(String category) {
+        List<Book> books = new ArrayList<>();
+        String query = "SELECT * FROM books WHERE category = ? ORDER BY title";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setString(1, category);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Book book = new Book();
+                    book.setBookId(rs.getInt("book_id"));
+                    book.setTitle(rs.getString("title"));
+                    book.setAuthor(rs.getString("author"));
+                    book.setIsbn(rs.getString("isbn"));
+                    book.setPrice(rs.getDouble("price"));
+                    book.setQuantity(rs.getInt("quantity"));
+                    book.setCategory(rs.getString("category"));
+                    book.setPublishYear(rs.getInt("publish_year"));
+                    books.add(book);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error searching books by category: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return books;
+    }
+    
+    public boolean updateStock(int bookId, int quantityChange) {
+        String query = "UPDATE books SET quantity = quantity + ? WHERE book_id = ? AND quantity + ? >= 0";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setInt(1, quantityChange);
+            pstmt.setInt(2, bookId);
+            pstmt.setInt(3, quantityChange);
+            
+            return pstmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating stock: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return false;
+    }
+    
+    public boolean updateStockWithTransaction(int bookId, int quantityChange) throws SQLException {
+        String query = "UPDATE books SET quantity = quantity + ? WHERE book_id = ?";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setInt(1, quantityChange);
+            pstmt.setInt(2, bookId);
+            
+            return pstmt.executeUpdate() > 0;
+        }
+    }
+    
+    public List<String> getAllCategories() {
+        List<String> categories = new ArrayList<>();
+        String query = "SELECT DISTINCT category FROM books WHERE category IS NOT NULL ORDER BY category";
+        
+        try (Connection conn = veriTabani.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            
+            while (rs.next()) {
+                categories.add(rs.getString("category"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting categories: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return categories;
+    }
+    
+    public List<Book> getLowStockBooks(int threshold) {
+        List<Book> books = new ArrayList<>();
+        String query = "SELECT * FROM books WHERE quantity <= ? ORDER BY quantity, title";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setInt(1, threshold);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Book book = new Book();
+                    book.setBookId(rs.getInt("book_id"));
+                    book.setTitle(rs.getString("title"));
+                    book.setAuthor(rs.getString("author"));
+                    book.setIsbn(rs.getString("isbn"));
+                    book.setPrice(rs.getDouble("price"));
+                    book.setQuantity(rs.getInt("quantity"));
+                    book.setCategory(rs.getString("category"));
+                    book.setPublishYear(rs.getInt("publish_year"));
+                    books.add(book);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting low stock books: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return books;
+    }
+    
+    public boolean isIsbnExists(String isbn) {
+        String query = "SELECT COUNT(*) FROM books WHERE isbn = ?";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setString(1, isbn);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error checking ISBN: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return false;
+    }
+    
+    public boolean isIsbnExists(String isbn, int excludeBookId) {
+        String query = "SELECT COUNT(*) FROM books WHERE isbn = ? AND book_id != ?";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setString(1, isbn);
+            pstmt.setInt(2, excludeBookId);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error checking ISBN: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return false;
+    }
+    
+    public int getTotalBookCount() {
+        String query = "SELECT COUNT(*) FROM books";
+        
+        try (Connection conn = veriTabani.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting total book count: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return 0;
+    }
+    
+    public double getTotalInventoryValue() {
+        String query = "SELECT SUM(price * quantity) FROM books";
+        
+        try (Connection conn = veriTabani.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            
+            if (rs.next()) {
+                return rs.getDouble(1);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting total inventory value: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return 0.0;
+    }
+
+	@Override
+	public Customer read1(int id) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	
+}
