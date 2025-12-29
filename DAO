@@ -1,0 +1,15 @@
+package dao;
+
+import java.util.List;
+import model.Book;
+import model.Customer;
+
+
+public interface DAO<T> {
+    boolean create(T entity);
+    Customer read1(int id);
+    Book read(int id); 
+    List<T> readAll();
+    boolean update(T entity);
+    boolean delete(int id);
+}
