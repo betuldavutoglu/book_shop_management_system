@@ -1,1 +1,1 @@
-Nesne Tabanlı Progranlama dersi için yaptığımız Book Shop Management System(Kitap Mağazası Yönetim sistemi) kodları bulunmaktadır.
+Nesne Tabanlı Progranlama dersi için yaptığımız Book Shop Management System(Kitap Mağazası Yönetim sistemi) kodları bulunmaktadır. Kodlar Branch kısmının altındadır.
