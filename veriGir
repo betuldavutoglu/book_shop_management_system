@@ -1,0 +1,83 @@
+package database;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+
+public class veriGir {
+    static final String DB_URL = "jdbc:mysql://localhost:3306/BookShopManagement";
+    static final String USER = "root";
+    static final String PASS = "Ba2541*";
+
+    public static void main(String[] args) {
+        Connection conn = null;
+        Statement stm = null;
+        
+        try {
+            conn = DriverManager.getConnection(DB_URL, USER, PASS);
+            stm = conn.createStatement();
+            
+            String sql01 = "INSERT INTO books (title, author, isbn, price, quantity, category, publish_year) " +
+                         "VALUES ('Kayıp Zamanın İzinde', 'Marcel Proust', '978-654-3210-00-1', 249.99, 30, 'Roman', 1913)";
+            
+            String sql02 = "INSERT INTO books (title, author, isbn, price, quantity, category, publish_year) " +
+                         "VALUES ('Suç ve Ceza', 'Fyodor Dostoyevski', '978-654-3210-00-2', 349.99, 42, 'Psikolojik Roman', 1866)";
+            
+            String sql03 = "INSERT INTO books (title, author, isbn, price, quantity, category, publish_year) " +
+                         "VALUES ('Bülbülü Öldürmek', 'Harper Lee', '978-654-3210-00-3', 299.99, 55, 'Roman', 1960)";
+            
+            String sql04 = "INSERT INTO books (title, author, isbn, price, quantity, category, publish_year) " +
+                         "VALUES ('Marslı', 'Andy Weir', '978-654-3210-00-4', 329.99, 60, 'Bilim Kurgu', 2014)";
+            
+            String sql05 = "INSERT INTO books (title, author, isbn, price, quantity, category, publish_year) " +
+                         "VALUES ('Da Vinci Şifresi', 'Dan Brown', '978-654-3210-00-5', 369.99, 55, 'Gerilim', 2003)";
+            
+            stm.executeUpdate(sql01);
+            stm.executeUpdate(sql02);
+            stm.executeUpdate(sql03);
+            stm.executeUpdate(sql04);
+            stm.executeUpdate(sql05);
+            
+            System.out.println("5 kitap eklendi");
+            
+            
+            String sql11 = "INSERT INTO customers (first_name, last_name, email, phone) " +
+                         "VALUES ('Ahmet', 'Yılmaz', 'ahmet.yilmaz@email.com', '0555-100-1000')";
+            
+            String sql12 = "INSERT INTO customers (first_name, last_name, email, phone) " +
+                         "VALUES ('Ayşe', 'Kaya', 'ayse.kaya@email.com', '0555-100-1001')";  
+            
+            String sql13 = "INSERT INTO customers (first_name, last_name, email, phone) " +
+                         "VALUES ('Mehmet', 'Demir', 'mehmet.demir@email.com', '0555-100-1002')";
+            
+            String sql14 = "INSERT INTO customers (first_name, last_name, email, phone) " +
+                         "VALUES ('Fatma', 'Şahin', 'fatma.sahin@email.com', '0555-100-1003')";
+            
+            String sql15 = "INSERT INTO customers (first_name, last_name, email, phone) " +
+                         "VALUES ('Zeynep', 'Arslan', 'zeynep.arslan@email.com', '0555-100-1004')";
+            
+            stm.executeUpdate(sql11);
+            stm.executeUpdate(sql12);
+            stm.executeUpdate(sql13);
+            stm.executeUpdate(sql14);
+            stm.executeUpdate(sql15);
+            
+            System.out.println("5 müşteri eklendi");
+            System.out.println("Toplam 10 kayıt başarıyla eklendi");
+            
+        } catch (SQLException e) {
+            System.err.println("SQL Hata Kodu: " + e.getErrorCode());
+            System.err.println("Hata Mesajı: " + e.getMessage());
+            System.err.println("SQL Durumu: " + e.getSQLState());
+            e.printStackTrace();
+        } finally {
+            try {
+                if (stm != null) stm.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
