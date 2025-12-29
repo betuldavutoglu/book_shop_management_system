@@ -1,0 +1,696 @@
+package ui;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import model.Order;
+import model.OrderItem;
+import model.Book;
+import model.Customer;
+import service.OrderService;
+import service.BookService;
+import service.CustomerService;
+import java.awt.*;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+
+@SuppressWarnings("serial")
+public class OrderPanel extends JPanel {
+    private JTable orderTable;
+    private DefaultTableModel tableModel;
+    private OrderService orderService;
+    private BookService bookService;
+    private CustomerService customerService;
+    private SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+    
+    public OrderPanel() {
+        this.orderService = new OrderService();
+        this.bookService = new BookService();
+        this.customerService = new CustomerService();
+        initializeUI();
+        loadOrders();
+    }
+    
+    private void initializeUI() {
+        setLayout(new BorderLayout());
+        
+        // Top panel with title
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        JLabel titleLabel = new JLabel("Sipariş Yönetimi", SwingConstants.LEFT);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 18));
+        topPanel.add(titleLabel, BorderLayout.WEST);
+        
+        add(topPanel, BorderLayout.NORTH);
+        
+        // Table
+        String[] columns = {"Sipariş No", "Müşteri", "Tarih", "Toplam Tutar", "Durum"};
+        tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        
+        orderTable = new JTable(tableModel);
+        orderTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        orderTable.setRowHeight(25);
+        orderTable.getColumnModel().getColumn(0).setPreferredWidth(80);  // Sipariş No
+        orderTable.getColumnModel().getColumn(1).setPreferredWidth(150); // Müşteri
+        orderTable.getColumnModel().getColumn(2).setPreferredWidth(120); // Tarih
+        orderTable.getColumnModel().getColumn(3).setPreferredWidth(100); // Tutar
+        orderTable.getColumnModel().getColumn(4).setPreferredWidth(100); // Durum
+        
+        JScrollPane scrollPane = new JScrollPane(orderTable);
+        add(scrollPane, BorderLayout.CENTER);
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        
+        JButton createButton = new JButton("Yeni Sipariş");
+        JButton viewButton = new JButton("Detayları Gör");
+        JButton updateStatusButton = new JButton("Durum Güncelle");
+        JButton deleteButton = new JButton("Sipariş Sil");
+        JButton refreshButton = new JButton("Yenile");
+        
+        createButton.addActionListener(e -> showCreateOrderDialog());
+        viewButton.addActionListener(e -> viewOrderDetails());
+        updateStatusButton.addActionListener(e -> updateOrderStatus());
+        deleteButton.addActionListener(e -> deleteSelectedOrder());
+        refreshButton.addActionListener(e -> loadOrders());
+        
+        buttonPanel.add(createButton);
+        buttonPanel.add(viewButton);
+        buttonPanel.add(updateStatusButton);
+        buttonPanel.add(deleteButton);
+        buttonPanel.add(refreshButton);
+        
+        add(buttonPanel, BorderLayout.SOUTH);
+    }
+    
+    
+    private void loadOrders() {
+        tableModel.setRowCount(0);
+        
+        try {
+            System.out.println("Siparişler yükleniyor...");
+            List<Order> orders = orderService.getAllOrders();
+            System.out.println("Toplam " + orders.size() + " sipariş bulundu");
+            
+            if (orders.isEmpty()) {
+                System.out.println("Henüz sipariş bulunmamaktadır.");
+                return;
+            }
+            
+            for (Order order : orders) {
+                String customerName = order.getCustomerName();
+                if (customerName == null || customerName.trim().isEmpty()) {
+                    customerName = "Müşteri " + order.getCustomerId();
+                }
+                
+                String dateStr = "";
+                if (order.getOrderDate() != null) {
+                    dateStr = dateFormat.format(order.getOrderDate());
+                }
+                
+                Object[] row = {
+                    order.getOrderId(),
+                    customerName,
+                    dateStr,
+                    String.format("%.2f TL", order.getTotalAmount()),
+                    order.getStatus()
+                };
+                tableModel.addRow(row);
+                
+                System.out.println("Sipariş eklendi: ID=" + order.getOrderId() + 
+                                 ", Müşteri=" + customerName + 
+                                 ", Tutar=" + order.getTotalAmount());
+            }
+            
+            System.out.println("Siparişler başarıyla yüklendi: " + tableModel.getRowCount() + " adet");
+            
+        } catch (Exception e) {
+            System.err.println("Siparişleri yükleme hatası: " + e.getMessage());
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, 
+                "Siparişler yüklenirken hata: " + e.getMessage(),
+                "Hata", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    private void viewOrderDetails() {
+        int selectedRow = orderTable.getSelectedRow();
+        if (selectedRow >= 0) {
+            try {
+                int orderId = (int) tableModel.getValueAt(selectedRow, 0);
+                
+                
+                Order order = orderService.getOrder(orderId);
+                if (order == null) {
+                    JOptionPane.showMessageDialog(this, "Sipariş bulunamadı!", "Hata", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
+                
+                StringBuilder details = new StringBuilder();
+                details.append("=== SİPARİŞ DETAYLARI ===\n\n");
+                details.append("Sipariş No: ").append(order.getOrderId()).append("\n");
+                details.append("Müşteri: ").append(order.getCustomerName() != null ? order.getCustomerName() : "Müşteri " + order.getCustomerId()).append("\n");
+                
+                if (order.getOrderDate() != null) {
+                    details.append("Tarih: ").append(dateFormat.format(order.getOrderDate())).append("\n");
+                }
+                
+                details.append("Toplam Tutar: ").append(String.format("%.2f TL", order.getTotalAmount())).append("\n");
+                details.append("Durum: ").append(order.getStatus()).append("\n\n");
+                
+                
+                details.append("=== SİPARİŞ ÖĞELERİ ===\n");
+                if (order.getItems() != null && !order.getItems().isEmpty()) {
+                    for (OrderItem item : order.getItems()) {
+                        details.append(String.format("- %s x%d = %.2f TL\n", 
+                            item.getBookTitle() != null ? item.getBookTitle() : "Kitap ID: " + item.getBookId(),
+                            item.getQuantity(),
+                            item.getTotalPrice()));
+                    }
+                } else {
+                    details.append("Sipariş öğesi bulunamadı.\n");
+                }
+                
+                JTextArea textArea = new JTextArea(details.toString());
+                textArea.setEditable(false);
+                textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+                
+                JScrollPane scrollPane = new JScrollPane(textArea);
+                scrollPane.setPreferredSize(new Dimension(500, 300));
+                
+                JOptionPane.showMessageDialog(this, scrollPane, 
+                    "Sipariş Detayları - #" + orderId, JOptionPane.INFORMATION_MESSAGE);
+                
+            } catch (Exception e) {
+                System.err.println("Sipariş detayları hatası: " + e.getMessage());
+                JOptionPane.showMessageDialog(this, 
+                    "Sipariş detayları yüklenirken hata: " + e.getMessage(),
+                    "Hata", JOptionPane.ERROR_MESSAGE);
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, "Lütfen bir sipariş seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+    
+    private void updateOrderStatus() {
+        int selectedRow = orderTable.getSelectedRow();
+        if (selectedRow >= 0) {
+            int orderId = (int) tableModel.getValueAt(selectedRow, 0);
+            String currentStatus = tableModel.getValueAt(selectedRow, 4).toString();
+            
+            String[] statusOptions = {"BEKLEMEDE", "HAZIRLANIYOR", "KARGODA", "TESLİM EDİLDİ", "İPTAL EDİLDİ"};
+            String newStatus = (String) JOptionPane.showInputDialog(
+                this, "Yeni durumu seçin:", "Sipariş Durumunu Güncelle",
+                JOptionPane.QUESTION_MESSAGE, null, statusOptions, currentStatus
+            );
+            
+            if (newStatus != null && !newStatus.equals(currentStatus)) {
+                try {
+                    System.out.println("Sipariş durumu güncelleniyor: " + orderId + " -> " + newStatus);
+                    
+                    if (orderService.updateOrderStatus(orderId, newStatus)) {
+                        tableModel.setValueAt(newStatus, selectedRow, 4);
+                        JOptionPane.showMessageDialog(this, 
+                            "Sipariş durumu başarıyla güncellendi!\n\n" +
+                            "Sipariş No: " + orderId + "\n" +
+                            "Yeni Durum: " + newStatus,
+                            "Başarılı", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(this, 
+                            "Sipariş durumu güncellenemedi!",
+                            "Hata", JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Durum güncelleme hatası: " + e.getMessage());
+                    JOptionPane.showMessageDialog(this, 
+                        "Hata: " + e.getMessage(), 
+                        "Hata", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, "Lütfen bir sipariş seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+    
+    private void deleteSelectedOrder() {
+        int selectedRow = orderTable.getSelectedRow();
+        if (selectedRow >= 0) {
+            int orderId = (int) tableModel.getValueAt(selectedRow, 0);
+            String customerName = tableModel.getValueAt(selectedRow, 1).toString();
+            String totalAmount = tableModel.getValueAt(selectedRow, 3).toString();
+            
+            String message = String.format(
+                "Aşağıdaki siparişi silmek istediğinize emin misiniz?\n\n" +
+                "Sipariş No: %d\n" +
+                "Müşteri: %s\n" +
+                "Toplam Tutar: %s\n\n" +
+                "Bu işlem geri alınamaz!",
+                orderId, customerName, totalAmount
+            );
+            
+            int confirm = JOptionPane.showConfirmDialog(
+                this,
+                message,
+                "SİPARİŞ SİLME ONAYI",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+            );
+            
+            if (confirm == JOptionPane.YES_OPTION) {
+                System.out.println("=== Kullanıcı sipariş silmeyi onayladı ===");
+                
+                try {
+                    // Progress bar göster
+                    JProgressBar progressBar = new JProgressBar();
+                    progressBar.setIndeterminate(true);
+                    JPanel progressPanel = new JPanel(new BorderLayout());
+                    progressPanel.add(new JLabel("Sipariş siliniyor..."), BorderLayout.NORTH);
+                    progressPanel.add(progressBar, BorderLayout.CENTER);
+                    
+                    JOptionPane progressDialog = new JOptionPane(
+                        progressPanel,
+                        JOptionPane.INFORMATION_MESSAGE,
+                        JOptionPane.DEFAULT_OPTION,
+                        null,
+                        new Object[]{},
+                        null
+                    );
+                    
+                    JDialog dialog = progressDialog.createDialog(this, "Lütfen Bekleyin");
+                    dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+                    
+                    // Thread ile silme işlemini gerçekleştir
+                    Thread deleteThread = new Thread(() -> {
+                        try {
+                            boolean success = orderService.deleteOrder(orderId);
+                            
+                            SwingUtilities.invokeLater(() -> {
+                                dialog.dispose();
+                                
+                                if (success) {
+                                    // Tablodan satırı kaldır
+                                    tableModel.removeRow(selectedRow);
+                                    
+                                    JOptionPane.showMessageDialog(
+                                        OrderPanel.this,
+                                        String.format(
+                                            "✓ Sipariş başarıyla silindi!\n\n" +
+                                            "Sipariş No: %d\n" +
+                                            "Müşteri: %s",
+                                            orderId, customerName
+                                        ),
+                                        "SİPARİŞ SİLİNDİ",
+                                        JOptionPane.INFORMATION_MESSAGE
+                                    );
+                                    
+                                    System.out.println("✓ Sipariş tablodan kaldırıldı");
+                                } else {
+                                    JOptionPane.showMessageDialog(
+                                        OrderPanel.this,
+                                        "Sipariş silinemedi!\n\n" +
+                                        "Olası nedenler:\n" +
+                                        "• Sipariş zaten silinmiş olabilir\n" +
+                                        "• Veritabanı hatası\n" +
+                                        "• Bağlantı problemi",
+                                        "SİLME HATASI",
+                                        JOptionPane.ERROR_MESSAGE
+                                    );
+                                }
+                            });
+                            
+                        } catch (Exception e) {
+                            SwingUtilities.invokeLater(() -> {
+                                dialog.dispose();
+                                JOptionPane.showMessageDialog(
+                                    OrderPanel.this,
+                                    "Sipariş silinirken hata oluştu:\n" + e.getMessage(),
+                                    "HATA",
+                                    JOptionPane.ERROR_MESSAGE
+                                );
+                            });
+                        }
+                    });
+                    
+                    deleteThread.start();
+                    dialog.setVisible(true);
+                    
+                } catch (Exception e) {
+                    System.err.println("Sipariş silme UI hatası: " + e.getMessage());
+                    e.printStackTrace();
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "Sipariş silinirken hata oluştu:\n" + e.getMessage(),
+                        "HATA",
+                        JOptionPane.ERROR_MESSAGE
+                    );
+                }
+            } else {
+                System.out.println("Kullanıcı sipariş silmeyi iptal etti");
+            }
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "Lütfen silmek için bir sipariş seçin!",
+                "UYARI",
+                JOptionPane.WARNING_MESSAGE
+            );
+        }
+    }
+    
+    private void showCreateOrderDialog() {
+        JDialog dialog = new JDialog((Frame)SwingUtilities.getWindowAncestor(this), 
+            "Yeni Sipariş Oluştur", true);
+        dialog.setSize(850, 600);
+        dialog.setLocationRelativeTo(this);
+        
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        
+        JPanel customerPanel = new JPanel(new BorderLayout());
+        customerPanel.setBorder(BorderFactory.createTitledBorder("Müşteri Seçimi"));
+        
+        JComboBox<String> customerCombo = new JComboBox<>();
+        customerCombo.addItem("-- Müşteri Seçin --");
+        
+        try {
+            List<Customer> customers = customerService.getAllCustomers();
+            if (customers.isEmpty()) {
+                customerCombo.addItem("⚠️ Müşteri bulunamadı!");
+                customerCombo.setEnabled(false);
+            } else {
+                for (Customer customer : customers) {
+                    customerCombo.addItem(customer.getCustomerId() + " - " + 
+                                         customer.getFirstName() + " " + customer.getLastName() +
+                                         " (" + customer.getEmail() + ")");
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Müşteriler yüklenemedi: " + e.getMessage());
+            customerCombo.addItem("⚠️ Müşteriler yüklenemedi!");
+            customerCombo.setEnabled(false);
+        }
+        
+        customerPanel.add(new JLabel("Müşteri:"), BorderLayout.WEST);
+        customerPanel.add(customerCombo, BorderLayout.CENTER);
+        
+      
+        JPanel bookPanel = new JPanel(new BorderLayout());
+        bookPanel.setBorder(BorderFactory.createTitledBorder("Kitap Seçimi ve Sepet"));
+        
+       
+        JComboBox<String> bookCombo = new JComboBox<>();
+        bookCombo.addItem("-- Kitap Seçin --");
+        Map<String, Book> bookMap = new HashMap<>();
+        
+        try {
+            List<Book> allBooks = bookService.getAllBooks();
+            System.out.println("Toplam kitap sayısı: " + allBooks.size());
+            
+            int availableBooks = 0;
+            for (Book book : allBooks) {
+                if (book.getQuantity() > 0) {
+                    String displayText = book.getTitle() + " | " + 
+                                       String.format("%.2f TL", book.getPrice()) + 
+                                       " | Stok: " + book.getQuantity();
+                    bookCombo.addItem(displayText);
+                    bookMap.put(displayText, book);
+                    availableBooks++;
+                }
+            }
+            
+            if (availableBooks == 0) {
+                bookCombo.addItem("⚠️ Stokta kitap yok!");
+                bookCombo.setEnabled(false);
+            }
+            
+            System.out.println("Sepete eklenebilir kitap sayısı: " + availableBooks);
+            
+        } catch (Exception e) {
+            System.err.println("Kitaplar yüklenemedi: " + e.getMessage());
+            bookCombo.addItem("⚠️ Kitaplar yüklenemedi!");
+            bookCombo.setEnabled(false);
+        }
+        
+        
+        String[] cartColumns = {"Kitap ID", "Kitap Adı", "Miktar", "Birim Fiyat", "Toplam"};
+        DefaultTableModel cartModel = new DefaultTableModel(cartColumns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable cartTable = new JTable(cartModel);
+        cartTable.setRowHeight(25);
+        cartTable.getColumnModel().getColumn(0).setPreferredWidth(60);  
+        cartTable.getColumnModel().getColumn(1).setPreferredWidth(200); 
+        cartTable.getColumnModel().getColumn(2).setPreferredWidth(60);  
+        cartTable.getColumnModel().getColumn(3).setPreferredWidth(80);  
+        cartTable.getColumnModel().getColumn(4).setPreferredWidth(80);  
+        
+        JScrollPane cartScrollPane = new JScrollPane(cartTable);
+        
+        
+        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        JSpinner qtySpinner = new JSpinner(new SpinnerNumberModel(1, 1, 999, 1));
+        JButton addBtn = new JButton("Sepete Ekle");
+        JButton removeBtn = new JButton("Seçileni Çıkar");
+        JButton clearBtn = new JButton("Sepeti Temizle");
+        
+        controlPanel.add(new JLabel("Kitap:"));
+        controlPanel.add(bookCombo);
+        controlPanel.add(new JLabel("Miktar:"));
+        controlPanel.add(qtySpinner);
+        controlPanel.add(addBtn);
+        controlPanel.add(removeBtn);
+        controlPanel.add(clearBtn);
+        
+        
+        JLabel totalLabel = new JLabel("Toplam: 0.00 TL");
+        totalLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        JPanel totalPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        totalPanel.add(totalLabel);
+        
+        
+        addBtn.addActionListener(e -> {
+            String selectedBookText = (String) bookCombo.getSelectedItem();
+            int quantity = (int) qtySpinner.getValue();
+            
+            if (selectedBookText == null || selectedBookText.equals("-- Kitap Seçin --")) {
+                JOptionPane.showMessageDialog(dialog, "Lütfen bir kitap seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            Book selectedBook = bookMap.get(selectedBookText);
+            if (selectedBook == null) {
+                JOptionPane.showMessageDialog(dialog, "Kitap bilgileri alınamadı!", "Hata", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            
+            if (quantity > selectedBook.getQuantity()) {
+                JOptionPane.showMessageDialog(dialog, 
+                    "Yetersiz stok! Mevcut stok: " + selectedBook.getQuantity(),
+                    "Stok Hatası", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            
+            boolean bookExists = false;
+            for (int i = 0; i < cartModel.getRowCount(); i++) {
+                int bookIdInCart = (int) cartModel.getValueAt(i, 0);
+                if (bookIdInCart == selectedBook.getBookId()) {
+                    int currentQty = (int) cartModel.getValueAt(i, 2);
+                    int newQty = currentQty + quantity;
+                    
+                    if (newQty > selectedBook.getQuantity()) {
+                        JOptionPane.showMessageDialog(dialog, 
+                            "Toplam miktar stoktan fazla! Mevcut stok: " + selectedBook.getQuantity(),
+                            "Stok Hatası", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    
+                    cartModel.setValueAt(newQty, i, 2);
+                    double newTotal = newQty * selectedBook.getPrice();
+                    cartModel.setValueAt(String.format("%.2f TL", newTotal), i, 4);
+                    bookExists = true;
+                    break;
+                }
+            }
+            
+            
+            if (!bookExists) {
+                double itemTotal = quantity * selectedBook.getPrice();
+                cartModel.addRow(new Object[]{
+                    selectedBook.getBookId(),
+                    selectedBook.getTitle(),
+                    quantity,
+                    String.format("%.2f TL", selectedBook.getPrice()),
+                    String.format("%.2f TL", itemTotal)
+                });
+            }
+            
+            updateCartTotal(cartModel, totalLabel);
+            qtySpinner.setValue(1);
+            bookCombo.setSelectedIndex(0);
+        });
+        
+        
+        removeBtn.addActionListener(e -> {
+            int selectedRow = cartTable.getSelectedRow();
+            if (selectedRow >= 0) {
+                cartModel.removeRow(selectedRow);
+                updateCartTotal(cartModel, totalLabel);
+            } else {
+                JOptionPane.showMessageDialog(dialog, "Lütfen çıkarmak için bir kitap seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+        
+        
+        clearBtn.addActionListener(e -> {
+            if (cartModel.getRowCount() > 0) {
+                int confirm = JOptionPane.showConfirmDialog(dialog,
+                    "Sepetinizdeki tüm kitapları temizlemek istediğinize emin misiniz?",
+                    "Sepeti Temizle", JOptionPane.YES_NO_OPTION);
+                
+                if (confirm == JOptionPane.YES_OPTION) {
+                    cartModel.setRowCount(0);
+                    updateCartTotal(cartModel, totalLabel);
+                }
+            }
+        });
+        
+        
+        bookPanel.add(controlPanel, BorderLayout.NORTH);
+        bookPanel.add(cartScrollPane, BorderLayout.CENTER);
+        bookPanel.add(totalPanel, BorderLayout.SOUTH);
+        
+       
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        JButton saveBtn = new JButton("Siparişi Oluştur");
+        JButton cancelBtn = new JButton("İptal");
+        
+        saveBtn.addActionListener(e -> {
+           
+            if (customerCombo.getSelectedIndex() <= 0 || 
+                customerCombo.getSelectedItem().toString().contains("⚠️")) {
+                JOptionPane.showMessageDialog(dialog, "Lütfen geçerli bir müşteri seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            if (cartModel.getRowCount() == 0) {
+                JOptionPane.showMessageDialog(dialog, "Lütfen sepete kitap ekleyin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            try {
+                
+                String selectedCustomer = (String) customerCombo.getSelectedItem();
+                int customerId = Integer.parseInt(selectedCustomer.split(" - ")[0].trim());
+                
+                
+                List<OrderItem> items = new ArrayList<>();
+                double totalAmount = 0;
+                
+                for (int i = 0; i < cartModel.getRowCount(); i++) {
+                    OrderItem item = new OrderItem();
+                    item.setBookId((int) cartModel.getValueAt(i, 0));
+                    item.setQuantity((int) cartModel.getValueAt(i, 2));
+                    
+                    String priceStr = cartModel.getValueAt(i, 3).toString()
+                        .replace(" TL", "").replace(",", ".");
+                    item.setUnitPrice(Double.parseDouble(priceStr));
+                    
+                    items.add(item);
+                    
+                    String totalStr = cartModel.getValueAt(i, 4).toString()
+                        .replace(" TL", "").replace(",", ".");
+                    totalAmount += Double.parseDouble(totalStr);
+                }
+                
+               
+                Order order = new Order();
+                order.setCustomerId(customerId);
+                order.setTotalAmount(totalAmount);
+                order.setStatus("BEKLEMEDE");
+                order.setItems(items);
+                
+                System.out.println("Sipariş oluşturuluyor: Müşteri ID=" + customerId + 
+                                 ", Tutar=" + totalAmount + ", Öğe sayısı=" + items.size());
+                
+                
+                if (orderService.createOrder(order)) {
+                    JOptionPane.showMessageDialog(dialog, 
+                        "✓ Sipariş başarıyla oluşturuldu!\n\n" +
+                        "Sipariş No: " + order.getOrderId() + "\n" +
+                        "Toplam Tutar: " + String.format("%.2f TL", totalAmount) + "\n" +
+                        "Durum: BEKLEMEDE",
+                        "Başarılı", JOptionPane.INFORMATION_MESSAGE);
+                    
+                    dialog.dispose();
+                    loadOrders(); 
+                    
+                } else {
+                    JOptionPane.showMessageDialog(dialog, 
+                        "Sipariş oluşturulamadı!\n\n" +
+                        "Olası nedenler:\n" +
+                        "• Stok yetersiz olabilir\n" +
+                        "• Veritabanı hatası\n" +
+                        "• Sistem hatası",
+                        "Hata", JOptionPane.ERROR_MESSAGE);
+                }
+                
+            } catch (NumberFormatException ex) {
+                System.err.println("Sayı format hatası: " + ex.getMessage());
+                JOptionPane.showMessageDialog(dialog, 
+                    "Geçersiz sayı formatı! Lütfen tekrar deneyin.\n" + ex.getMessage(),
+                    "Hata", JOptionPane.ERROR_MESSAGE);
+            } catch (Exception ex) {
+                System.err.println("Sipariş oluşturma hatası: " + ex.getMessage());
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(dialog, 
+                    "Sipariş oluşturulurken hata:\n" + ex.getMessage(),
+                    "Hata", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        cancelBtn.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(cancelBtn);
+        buttonPanel.add(saveBtn);
+        
+       
+        mainPanel.add(customerPanel, BorderLayout.NORTH);
+        mainPanel.add(bookPanel, BorderLayout.CENTER);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        dialog.add(mainPanel);
+        dialog.setVisible(true);
+    }
+    
+    private void updateCartTotal(DefaultTableModel model, JLabel label) {
+        double total = 0;
+        try {
+            for (int i = 0; i < model.getRowCount(); i++) {
+                String totalStr = model.getValueAt(i, 4).toString()
+                    .replace(" TL", "").replace(",", ".");
+                total += Double.parseDouble(totalStr);
+            }
+            label.setText(String.format("Toplam: %.2f TL", total));
+        } catch (NumberFormatException e) {
+            System.err.println("Toplam hesaplama hatası: " + e.getMessage());
+            label.setText("Toplam: Hesaplanamadı");
+        }
+    }
+}
+
+
