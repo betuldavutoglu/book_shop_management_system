@@ -1,0 +1,170 @@
+package dao;
+
+import model.Book;
+import model.Customer;
+
+import database.veriTabani;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public  class CustomerDAO implements DAO<Customer> {
+    
+    @Override
+    public boolean create(Customer customer) {
+        String query = "INSERT INTO customers (first_name, last_name, email, phone, address) " +
+                      "VALUES (?, ?, ?, ?, ?)";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+            
+            pstmt.setString(1, customer.getFirstName());
+            pstmt.setString(2, customer.getLastName());
+            pstmt.setString(3, customer.getEmail());
+            pstmt.setString(4, customer.getPhone());
+            
+            
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        customer.setCustomerId(rs.getInt(1));
+                    }
+                }
+                return true;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error creating customer: " + e.getMessage());
+        }
+        return false;
+    }
+    
+    @Override
+    public Customer read1(int id) {
+        String query = "SELECT * FROM customers WHERE customer_id = ?";
+        Customer customer = null;
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setInt(1, id);
+            ResultSet rs = pstmt.executeQuery();
+            
+            if (rs.next()) {
+                customer = new Customer();
+                customer.setCustomerId(rs.getInt("customer_id"));
+                customer.setFirstName(rs.getString("first_name"));
+                customer.setLastName(rs.getString("last_name"));
+                customer.setEmail(rs.getString("email"));
+                customer.setPhone(rs.getString("phone"));
+                
+            }
+        } catch (SQLException e) {
+            System.err.println("Error reading customer: " + e.getMessage());
+        }
+        return customer;
+    }
+    
+    @Override
+    public List<Customer> readAll() {
+        List<Customer> customers = new ArrayList<>();
+        String query = "SELECT * FROM customers ORDER BY last_name, first_name";
+        
+        try (Connection conn =veriTabani.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            
+            while (rs.next()) {
+                Customer customer = new Customer();
+                customer.setCustomerId(rs.getInt("customer_id"));
+                customer.setFirstName(rs.getString("first_name"));
+                customer.setLastName(rs.getString("last_name"));
+                customer.setEmail(rs.getString("email"));
+                customer.setPhone(rs.getString("phone"));
+                customers.add(customer);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error reading all customers: " + e.getMessage());
+        }
+        return customers;
+    }
+    
+    @Override
+    public boolean update(Customer customer) {
+        String query = "UPDATE customers SET first_name = ?, last_name = ?, email = ?, " +
+                      "phone = ?, address = ? WHERE customer_id = ?";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setString(1, customer.getFirstName());
+            pstmt.setString(2, customer.getLastName());
+            pstmt.setString(3, customer.getEmail());
+            pstmt.setString(4, customer.getPhone());
+            pstmt.setInt(6, customer.getCustomerId());
+            
+            return pstmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating customer: " + e.getMessage());
+        }
+        return false;
+    }
+    
+    @Override
+    public boolean delete(int id) {
+        String query = "DELETE FROM customers WHERE customer_id = ?";
+        
+        try (Connection conn =veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setInt(1, id);
+            return pstmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error deleting customer: " + e.getMessage());
+        }
+        return false;
+    }
+    
+    // Additional methods
+    public List<Customer> searchByName(String keyword) {
+        List<Customer> customers = new ArrayList<>();
+        String query = "SELECT * FROM customers WHERE first_name LIKE ? OR last_name LIKE ? " +
+                      "ORDER BY last_name, first_name";
+        
+        try (Connection conn = veriTabani.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            
+            pstmt.setString(1, "%" + keyword + "%");
+            pstmt.setString(2, "%" + keyword + "%");
+            ResultSet rs = pstmt.executeQuery();
+            
+            while (rs.next()) {
+                Customer customer = new Customer();
+                customer.setCustomerId(rs.getInt("customer_id"));
+                customer.setFirstName(rs.getString("first_name"));
+                customer.setLastName(rs.getString("last_name"));
+                customer.setEmail(rs.getString("email"));
+                customer.setPhone(rs.getString("phone"));
+                
+                customers.add(customer);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error searching customers: " + e.getMessage());
+        }
+        return customers;
+    }
+
+	public int countAll() {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	@Override
+	public Book read(int id) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	
+}
